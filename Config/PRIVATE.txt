@@ -3,3 +3,7 @@ CONFIG_PACKAGE_luci-app-passwall=y
 
 # Docker
 CONFIG_PACKAGE_luci-app-dockerman=y
+
+# WireGuard
+CONFIG_PACKAGE_wireguard-tools=y
+CONFIG_PACKAGE_luci-proto-wireguard=y
