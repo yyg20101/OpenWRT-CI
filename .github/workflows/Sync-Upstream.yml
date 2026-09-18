@@ -2,8 +2,8 @@ name: Sync Upstream
 
 on:
   schedule:
-    # 每小时同步一次，避开整点；UTC 20:07 即北京时间 04:07。
-    - cron: '7 * * * *'
+    # 每天同步一次：UTC 20:51 即北京时间次日 04:51，比 Auto-Clean 提前 30 分钟。
+    - cron: '51 20 * * *'
   workflow_dispatch:
 
 permissions:
