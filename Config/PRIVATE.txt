@@ -7,3 +7,8 @@ CONFIG_PACKAGE_luci-app-dockerman=y
 # WireGuard
 CONFIG_PACKAGE_wireguard-tools=y
 CONFIG_PACKAGE_luci-proto-wireguard=y
+
+# QModem：保留原有自定义选择，避免修改上游 GENERAL.txt
+CONFIG_PACKAGE_qmodem_INCLUDE_generic-qmi-wwan=y
+CONFIG_PACKAGE_qmodem_INCLUDE_nss-qmi-wwan=n
+CONFIG_PACKAGE_qmodem_INCLUDE_vendor-qmi-wwan=n
