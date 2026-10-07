@@ -5,6 +5,11 @@ on:
     # 每天同步一次：UTC 20:51 即北京时间次日 04:51，比 Auto-Clean 提前 30 分钟。
     - cron: '51 20 * * *'
   workflow_dispatch:
+    inputs:
+      diagnostic_failure:
+        description: '仅测试异常上报，不执行分支同步'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -17,8 +22,15 @@ jobs:
   sync:
     if: github.repository == 'yyg20101/OpenWRT-CI' && github.ref == 'refs/heads/custom'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 8
+    outputs:
+      report: ${{ steps.diagnostics.outputs.report }}
     steps:
+      - name: Prepare diagnostics
+        run: |
+          mkdir -p "$RUNNER_TEMP/fork-sync"
+          printf 'SYNC_LOG_DIR=%s/fork-sync\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
+
       - name: Check sync credential
         env:
           SYNC_TOKEN: ${{ secrets.SYNC_TOKEN }}
@@ -42,5 +54,58 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
 
-      - name: Mirror main and merge into custom
+      - name: Test failure reporting
+        if: inputs.diagnostic_failure == true
+        run: |
+          printf 'stage\tdiagnostic_test\nreason\tintentional_test_failure\n' > "$SYNC_LOG_DIR/state.tsv"
+          printf '手动异常上报测试：未执行分支同步。\n' > "$SYNC_LOG_DIR/sync.log"
+          exit 1
+
+      - name: Merge, atomically push and verify
         run: bash Scripts/Sync-Upstream.sh
+
+      - name: Collect diagnostics
+        id: diagnostics
+        if: always()
+        run: |
+          if [ -f Scripts/Collect-Sync-Report.cjs ]; then
+            node Scripts/Collect-Sync-Report.cjs
+          fi
+
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fork-sync-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.SYNC_LOG_DIR }}
+          retention-days: 7
+          if-no-files-found: ignore
+
+  report:
+    needs: sync
+    if: always() && needs.sync.result != 'skipped'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+      issues: write
+    steps:
+      # 不依赖可能已失效的 SYNC_TOKEN，上报脚本固定使用本次工作流提交。
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Persist incident or record recovery
+        uses: actions/github-script@v7
+        env:
+          SYNC_RESULT: ${{ needs.sync.result }}
+          SYNC_REPORT: ${{ needs.sync.outputs.report }}
+          DIAGNOSTIC_FAILURE: ${{ inputs.diagnostic_failure }}
+          TRIGGER_EVENT: ${{ github.event_name }}
+        with:
+          retries: 3
+          script: |
+            const report = require(`${process.env.GITHUB_WORKSPACE}/Scripts/Report-Sync-Result.cjs`);
+            await report({ github, context, core });
