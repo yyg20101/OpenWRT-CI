@@ -10,12 +10,33 @@ module.exports = async ({ github, context, core }, env = process.env) => {
   const runUrl = `${context.serverUrl || 'https://github.com'}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
   let report = {};
   if (env.SYNC_REPORT) report = JSON.parse(Buffer.from(env.SYNC_REPORT, 'base64').toString('utf8'));
-  const { data: jobs } = await github.rest.actions.listJobsForWorkflowRun({
-    ...context.repo, run_id: context.runId, filter: 'latest', per_page: 100,
-  });
-  const failed = jobs.jobs.flatMap(job => (job.steps || [])
+  let jobs = [];
+  try {
+    const response = await github.rest.actions.listJobsForWorkflowRun({
+      ...context.repo, run_id: context.runId, filter: 'latest', per_page: 100,
+    });
+    jobs = response.data.jobs;
+  } catch (error) {
+    core.warning(`无法读取步骤列表（HTTP ${error.status || 'unknown'}）；仍尝试保存已有诊断。`);
+  }
+  const failed = jobs.flatMap(job => (job.steps || [])
     .filter(step => ['failure', 'cancelled'].includes(step.conclusion))
     .map(step => `${job.name} / ${step.name}: ${step.conclusion}`));
+  // checkout/凭据检查失败时同步脚本尚未运行，使用 runner 已遮蔽凭据的作业日志补足错误详情。
+  let failureLog = '';
+  if (env.SYNC_RESULT !== 'success') {
+    const job = jobs.find(item => item.name === 'sync');
+    if (job) {
+      try {
+        const response = await github.rest.actions.downloadJobLogsForWorkflowRun({
+          ...context.repo, job_id: job.id,
+        });
+        if (typeof response.data === 'string') failureLog = redact(response.data).slice(-8000);
+      } catch (error) {
+        core.warning(`无法补充作业日志（HTTP ${error.status || 'unknown'}）；仍保存步骤和同步日志。`);
+      }
+    }
+  }
   const issues = await github.paginate(github.rest.issues.listForRepo, {
     ...context.repo, state: 'open', creator: 'github-actions[bot]', per_page: 100,
   });
@@ -47,6 +68,7 @@ module.exports = async ({ github, context, core }, env = process.env) => {
       .map(key => `| ${key} | ${clean(report[key])} |`),
     '', '冲突文件：', '```text', clean(report.conflicts || '无已记录的冲突'), '```',
     '', '同步日志尾部（最多 16000 字符）：', '```text', clean(report.log_tail || '脚本未执行；请检查上述失败步骤。'), '```',
+    ...(failureLog ? ['', '失败作业日志尾部（最多 8000 字符）：', '```text', clean(failureLog), '```'] : []),
     '', '本记录保存在 Issue 中，不受 Auto-Clean 删除 Actions 运行记录的影响。',
   ].join('\n');
   let issue = incident;

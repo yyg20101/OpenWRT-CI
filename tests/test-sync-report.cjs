@@ -10,9 +10,9 @@ function fixture() {
   const github = {
     paginate: async () => issues.filter(issue => issue.state === 'open'),
     rest: {
-      actions: { listJobsForWorkflowRun: async () => ({ data: { jobs: [{ name: 'sync', steps: [
+      actions: { listJobsForWorkflowRun: async () => ({ data: { jobs: [{ id: 7, name: 'sync', steps: [
         { name: 'Checkout custom', conclusion: 'failure' },
-      ] }] } }) },
+      ] }] } }), downloadJobLogsForWorkflowRun: async () => ({ data: 'fatal: Authentication failed\nAuthorization: bearer hidden\n' }) },
       issues: {
         listForRepo: () => {},
         create: async args => {
@@ -25,7 +25,7 @@ function fixture() {
     },
   };
   return { args: { github, context: { repo: { owner: 'yyg20101', repo: 'OpenWRT-CI' }, runId: 123, sha: 'abc' },
-    core: { info() {}, notice() {} } }, issues, comments, updates };
+    core: { info() {}, notice() {}, warning() {} } }, issues, comments, updates };
 }
 
 (async () => {
@@ -62,6 +62,12 @@ function fixture() {
   await publish(early.args, { SYNC_RESULT: 'failure' });
   assert(early.issues[0].body.includes('Checkout custom'));
   assert(early.issues[0].body.includes('脚本未执行'));
+  assert(early.issues[0].body.includes('Authentication failed'));
+  assert(!early.issues[0].body.includes('bearer hidden'));
+  const unavailableLogs = fixture();
+  unavailableLogs.args.github.rest.actions.listJobsForWorkflowRun = async () => { throw Object.assign(new Error('unavailable'), { status: 503 }); };
+  await publish(unavailableLogs.args, { SYNC_RESULT: 'failure', SYNC_REPORT: encoded });
+  assert.equal(unavailableLogs.issues.length, 1);
   const test = fixture();
   await publish(test.args, { SYNC_RESULT: 'failure', DIAGNOSTIC_FAILURE: 'true', SYNC_REPORT: encoded });
   assert.equal(test.issues[0].state, 'closed');
