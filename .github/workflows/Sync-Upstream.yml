@@ -21,7 +21,7 @@ concurrency:
 jobs:
   sync:
     if: github.repository == 'yyg20101/OpenWRT-CI' && github.ref == 'refs/heads/custom'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 8
     outputs:
       report: ${{ steps.diagnostics.outputs.report }}
@@ -41,7 +41,7 @@ jobs:
           fi
 
       - name: Checkout custom
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: custom
           fetch-depth: 0
@@ -74,7 +74,7 @@ jobs:
 
       - name: Upload diagnostics
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: fork-sync-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ env.SYNC_LOG_DIR }}
@@ -84,7 +84,7 @@ jobs:
   report:
     needs: sync
     if: always() && needs.sync.result != 'skipped'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
       contents: read
@@ -92,13 +92,13 @@ jobs:
       issues: write
     steps:
       # 不依赖可能已失效的 SYNC_TOKEN，上报脚本固定使用本次工作流提交。
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
 
       - name: Persist incident or record recovery
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         env:
           SYNC_RESULT: ${{ needs.sync.result }}
           SYNC_REPORT: ${{ needs.sync.outputs.report }}
