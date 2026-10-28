@@ -4,6 +4,9 @@
 # Nikki
 # CONFIG_PACKAGE_luci-app-nikki=y
 
+# 动态 DNS（原生 DDNS）
+CONFIG_PACKAGE_luci-app-ddns=y
+
 # Docker
 CONFIG_PACKAGE_luci-app-dockerman=y
 
