@@ -6,6 +6,7 @@ CONFIG_PACKAGE_luci-app-nikki=y
 
 # 动态 DNS（原生 DDNS）
 CONFIG_PACKAGE_luci-app-ddns=y
+CONFIG_PACKAGE_ddns-scripts-cloudflare=y
 
 # Docker
 CONFIG_PACKAGE_luci-app-dockerman=y
